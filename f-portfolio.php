@@ -1,253 +1,327 @@
 <?php
-/*
-Plugin Name: Futuristic Portfolio Display (All Features)
-Description: Futuristic portfolio CPT with media upload, features, whatsapp, frontend ratings, views, likes, and full display color settings.
-Version: 1.2
-Author: Collins Kulei
-*/
+/**
+ * Plugin Name: Futuristic Portfolio Display
+ * Description: A single-file WordPress plugin for displaying futuristic project cards with interactive ratings, likes, and WhatsApp integration.
+ * Version: 1.0.2
+ * Author: Collins Kulei 
+ */
 
-if (!defined('ABSPATH')) exit;
+/* ---------------------------
+| 1) Custom Post Type & Meta Setup: Preparing the Project Dungeon
+----------------------------*/
 
-
-// 1) Register CPT: Add Project
-
-add_action('init', function () {
+// Register the 'futuristic_project' Custom Post Type (CPT)
+add_action('init', 'fp_register_cpt');
+function fp_register_cpt() {
     $labels = [
-        'name' => 'Add Project',
-        'singular_name' => 'Project',
-        'menu_name' => 'Add Project'
+        'name' => 'Futuristic Projects',
+        'singular_name' => 'Futuristic Project',
+        'add_new_item' => 'Add New Futuristic Project',
+        'edit_item' => 'Edit Futuristic Project',
+        'new_item' => 'New Futuristic Project',
+        'view_item' => 'View Futuristic Project',
+        'search_items' => 'Search Projects',
     ];
-    register_post_type('futuristic_project', [
+    $args = [
         'labels' => $labels,
-        'public' => false,
-        'show_ui' => true,
-        'menu_icon' => 'dashicons-portfolio',
-        'supports' => ['title']
-    ]);
-});
+        'public' => false, // Keep it off the frontend archives, it's too cool for that.
+        'show_ui' => true, // Show the administrative interface
+        'menu_icon' => 'dashicons-hammer', // Because we're building things!
+        'supports' => ['title'], // Only need the title, all other data is custom
+        'has_archive' => false,
+        'rewrite' => false,
+        'query_var' => true,
+    ];
+    register_post_type('futuristic_project', $args);
+}
 
-//2) Enqueue admin media on our screens
+/* ---------------------------
+| 2) Admin Media Integration: Giving the Uploader its Caffeine Jolt
+----------------------------*/
 
-add_action('admin_enqueue_scripts', function ($hook) {
-    if (!in_array($hook, ['post.php', 'post-new.php'])) return;
-    $screen = get_current_screen();
-    if (!$screen || $screen->post_type !== 'futuristic_project') return;
+// Enqueue WordPress media scripts only on our CPT screen
+add_action('admin_enqueue_scripts', 'fp_enqueue_media_uploader');
+function fp_enqueue_media_uploader($hook) {
+    if ('post.php' == $hook || 'post-new.php' == $hook) {
+        $screen = get_current_screen();
+        if ('futuristic_project' === $screen->post_type) {
+            wp_enqueue_media();
+            // Load the inline script that handles the magic
+            add_action('admin_head', 'fp_media_uploader_scripts');
+        }
+    }
+}
 
-    wp_enqueue_media();
-    //  for upload buttons
-    $inline = <<<JS
-jQuery(function($){
-    $(document).on('click', '.fp-upload-btn', function(e){
-        e.preventDefault();
-        var button = $(this);
-        var targetName = button.data('target');
-        var input = button.siblings('input[name="'+targetName+'"]');
-        var preview = button.siblings('img.fp-img-preview').first();
+// The inline JavaScript that runs the media selector
+function fp_media_uploader_scripts() {
+    ?>
+    <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            // The glorious function for opening the media frame
+            function fp_open_media_uploader(target_input, target_preview) {
+                let media_frame;
+                if (media_frame) {
+                    media_frame.open();
+                    return;
+                }
+                media_frame = wp.media({
+                    title: 'Choose Project Image',
+                    button: { text: 'Use this image' },
+                    multiple: false
+                });
 
-        var frame = wp.media({
-            title: 'Select or Upload Image',
-            button: { text: 'Use this image' },
-            multiple: false
+                media_frame.on('select', function() {
+                    const attachment = media_frame.state().get('selection').first().toJSON();
+                    target_input.val(attachment.url);
+                    target_preview.html('<img src="' + attachment.url + '" style="max-width:150px; height:auto; border-radius: 4px;">');
+                });
+
+                media_frame.open();
+            }
+
+            // Hook up the buttons to the media frame
+            $('.fp-upload-btn').on('click', function(e) {
+                e.preventDefault();
+                const target_id = $(this).data('target');
+                const target_input = $('#' + target_id);
+                const target_preview = $('#' + target_id + '-preview');
+                fp_open_media_uploader(target_input, target_preview);
+            });
+            
+            // Initial preview load for existing images
+            $('.fp-upload-btn').each(function() {
+                const target_id = $(this).data('target');
+                const target_input = $('#' + target_id);
+                const target_preview = $('#' + target_id + '-preview');
+                const url = target_input.val();
+                if (url) {
+                    target_preview.html('<img src="' + url + '" style="max-width:150px; height:auto; border-radius: 4px;">');
+                }
+            });
         });
+    </script>
+    <?php
+}
 
-        frame.on('select', function(){
-            var att = frame.state().get('selection').first().toJSON();
-            input.val(att.url).trigger('change');
-            if (preview.length) preview.attr('src', att.url).show();
-        });
+/* ---------------------------
+| 3) Meta Box Setup: The Project Data Input Form
+----------------------------*/
 
-        frame.open();
-    });
-});
-JS;
-    wp_add_inline_script('jquery', $inline);
-});
+// Add the custom meta box to the CPT screen
+add_action('add_meta_boxes', 'fp_add_meta_box');
+function fp_add_meta_box() {
+    add_meta_box(
+        'fp_project_meta',
+        'Project Details (The Sacred Data)',
+        'fp_render_meta',
+        'futuristic_project',
+        'normal',
+        'high'
+    );
+}
 
+// Render the content of the meta box
+function fp_render_meta($post) {
+    // A security token (nonce) to protect our precious data
+    wp_nonce_field('fp_save_meta_box_data', 'fp_meta_nonce');
 
-//Meta box: Project Details
--
-add_action('add_meta_boxes', function () {
-    add_meta_box('fp_details', 'Project Details', 'fp_render_meta', 'futuristic_project', 'normal', 'high');
-});
-
-function fp_render_meta($post)
-{
-    wp_nonce_field('fp_save_meta', 'fp_meta_nonce');
-
-    $title = get_post_meta($post->ID, 'fp_title', true) ?: get_the_title($post->ID);
+    // Fetch existing values or default to empty
+    $title_override = get_post_meta($post->ID, 'fp_title', true);
     $problem = get_post_meta($post->ID, 'fp_problem', true);
     $link = get_post_meta($post->ID, 'fp_link', true);
     $img1 = get_post_meta($post->ID, 'fp_img1', true);
     $img2 = get_post_meta($post->ID, 'fp_img2', true);
-    // Note: fp_rating and fp_reviews are managed by the frontend AJAX handler
-    $rating = floatval(get_post_meta($post->ID, 'fp_rating', true));
-    $reviews = intval(get_post_meta($post->ID, 'fp_reviews', true));
     $features = get_post_meta($post->ID, 'fp_features', true);
-    $whatsapp = get_post_meta($post->ID, 'fp_whatsapp', true);
-    $likes = intval(get_post_meta($post->ID, 'fp_likes', true));
-    $views = intval(get_post_meta($post->ID, 'fp_views', true));
+    $likes = get_post_meta($post->ID, 'fp_likes', true) ?: 0;
+    $views = get_post_meta($post->ID, 'fp_views', true) ?: 0;
+    $rating = get_post_meta($post->ID, 'fp_rating', true) ?: 0.0;
+    $reviews = get_post_meta($post->ID, 'fp_reviews', true) ?: 0;
 
     ?>
     <style>
-        .fp-row{margin-bottom:12px}
-        .fp-media-input{width:70%;padding:6px}
-        .fp-img-preview{display:block;max-width:120px;margin-top:8px;border-radius:6px}
-        .fp-features{width:100%;min-height:80px;padding:8px}
+        .fp-meta-table td { padding: 8px 10px; }
+        .fp-meta-table label { font-weight: bold; }
     </style>
-
-    <div class="fp-row">
-        <label><strong>Display Title</strong></label><br>
-        <input type="text" name="fp_title" value="<?php echo esc_attr($title); ?>" style="width:100%;padding:6px;">
-    </div>
-
-    <div class="fp-row">
-        <label><strong>Problem it Solves</strong></label><br>
-        <textarea name="fp_problem" style="width:100%;padding:6px;"><?php echo esc_textarea($problem); ?></textarea>
-    </div>
-
-    <div class="fp-row">
-        <label><strong>Project Link (Visit Live)</strong></label><br>
-        <input type="url" name="fp_link" value="<?php echo esc_attr($link); ?>" style="width:100%;padding:6px;">
-    </div>
-
-    <div class="fp-row">
-        <label><strong>Image 1</strong></label><br>
-        <input class="fp-media-input" type="text" name="fp_img1" value="<?php echo esc_attr($img1); ?>">
-        <button class="button fp-upload-btn" data-target="fp_img1">Upload / Select</button><br>
-        <img class="fp-img-preview" src="<?php echo esc_url($img1); ?>" style="<?php echo $img1 ? '' : 'display:none'; ?>">
-    </div>
-
-    <div class="fp-row">
-        <label><strong>Image 2</strong></label><br>
-        <input class="fp-media-input" type="text" name="fp_img2" value="<?php echo esc_attr($img2); ?>">
-        <button class="button fp-upload-btn" data-target="fp_img2">Upload / Select</button><br>
-        <img class="fp-img-preview" src="<?php echo esc_url($img2); ?>" style="<?php echo $img2 ? '' : 'display:none'; ?>">
-    </div>
-
-    <div class="fp-row">
-        <label><strong>Features (one per line)</strong></label><br>
-        <textarea name="fp_features" class="fp-features" placeholder="List features, one per line"><?php echo esc_textarea($features); ?></textarea>
-        <small>Also accepted as comma-separated. Displayed on the modal.</small>
-    </div>
-
-    <div class="fp-row">
-        <label><strong>WhatsApp Number (with country code)</strong></label><br>
-        <input type="text" name="fp_whatsapp" value="<?php echo esc_attr($whatsapp); ?>" placeholder="+254712345678" style="width:100%;padding:6px;">
-        <small>Used by "I Want Like This" button — include country code, e.g. +254712345678</small>
-    </div>
-
-    <div class="fp-row" style="display:flex;gap:12px;align-items:flex-start">
-        <div>
-            <label><strong>Avg Rating (Read-Only)</strong></label><br>
-            <input type="text" value="<?php echo number_format($rating, 1); ?>" readonly style="width:100px;padding:6px; background-color:#f0f0f0;">
-        </div>
-
-        <div>
-            <label><strong>Review Count (Read-Only)</strong></label><br>
-            <input type="text" value="<?php echo intval($reviews); ?>" readonly style="width:120px;padding:6px; background-color:#f0f0f0;">
-        </div>
-
-        <div>
-            <label><strong>Likes</strong></label><br>
-            <input type="number" name="fp_likes" value="<?php echo intval($likes); ?>" min="0" style="width:120px;padding:6px;">
-        </div>
-
-        <div>
-            <label><strong>Views</strong></label><br>
-            <input type="number" name="fp_views" value="<?php echo intval($views); ?>" min="0" style="width:120px;padding:6px;">
-        </div>
-    </div>
-
+    <table class="form-table fp-meta-table">
+        <tr>
+            <td colspan="2">
+                <p>The title above is the *technical* title. Use the field below for the *display* title if you want it different.</p>
+                <label for="fp_title">Display Title Override</label><br>
+                <input type="text" id="fp_title" name="fp_title" value="<?php echo esc_attr($title_override); ?>" style="width: 100%;">
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2">
+                <label for="fp_problem">Problem/Goal Statement (The Project's Origin Story)</label><br>
+                <textarea id="fp_problem" name="fp_problem" style="width: 100%; height: 100px;"><?php echo esc_textarea($problem); ?></textarea>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label for="fp_link">Live Project Link (Where the Magic Happens)</label><br>
+                <input type="url" id="fp_link" name="fp_link" value="<?php echo esc_url($link); ?>" style="width: 100%;">
+            </td>
+            <td>
+                <label for="fp_features">Key Features (One per line or comma-separated)</label><br>
+                <textarea id="fp_features" name="fp_features" style="width: 100%; height: 100px;"><?php echo esc_textarea($features); ?></textarea>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <label for="fp_img1">Card Image URL (The Teaser)</label><br>
+                <input type="url" id="fp_img1" name="fp_img1" value="<?php echo esc_url($img1); ?>" style="width: 75%;">
+                <button class="button fp-upload-btn" data-target="fp_img1">Upload</button>
+                <div id="fp_img1-preview" style="margin-top: 5px;"></div>
+            </td>
+            <td>
+                <label for="fp_img2">Modal Image URL (The Grand Reveal)</label><br>
+                <input type="url" id="fp_img2" name="fp_img2" value="<?php echo esc_url($img2); ?>" style="width: 75%;">
+                <button class="button fp-upload-btn" data-target="fp_img2">Upload</button>
+                <div id="fp_img2-preview" style="margin-top: 5px;"></div>
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Likes (Public Digital Affection)</strong>: <?php echo intval($likes); ?></td>
+            <td><strong>Views (Curious Onlookers)</strong>: <?php echo intval($views); ?></td>
+        </tr>
+        <tr>
+            <td><strong>Current Rating (The Consensus)</strong>: <?php echo number_format($rating, 1); ?> / 5</td>
+            <td><strong>Total Reviews (Voices Heard)</strong>: <?php echo intval($reviews); ?></td>
+        </tr>
+    </table>
     <?php
 }
 
+/* ---------------------------
+| 4) Data Saving: Locking the Vault
+----------------------------*/
 
-//Save meta fields
+// Save the meta box content
+add_action('save_post', 'fp_save_meta_box_data');
+function fp_save_meta_box_data($post_id) {
+    // Security checks first! Don't let the hackers in.
+    if (!isset($_POST['fp_meta_nonce']) || !wp_verify_nonce($_POST['fp_meta_nonce'], 'fp_save_meta_box_data')) {
+        return $post_id;
+    }
 
-add_action('save_post', function ($post_id) {
-    if (!isset($_POST['fp_meta_nonce']) || !wp_verify_nonce($_POST['fp_meta_nonce'], 'fp_save_meta')) return;
-    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
-    if (get_post_type($post_id) !== 'futuristic_project') return;
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+        return $post_id;
+    }
 
-    $fields = [
-        'fp_title' => 'text',
-        'fp_problem' => 'text',
-        'fp_link' => 'url',
-        'fp_img1' => 'text',
-        'fp_img2' => 'text',
-        'fp_features' => 'text',
-        'fp_whatsapp' => 'text',
-        'fp_likes' => 'int',
-        'fp_views' => 'int'
-        
-        // reviews and rating are updated via the AJAX handler, not manually here
+    if ('futuristic_project' != $_POST['post_type'] || !current_user_can('edit_post', $post_id)) {
+        return $post_id;
+    }
+
+    // List of fields to save and their sanitization functions
+    $fields_to_save = [
+        'fp_title' => 'sanitize_text_field',
+        'fp_problem' => 'wp_kses_post',
+        'fp_link' => 'esc_url_raw',
+        'fp_img1' => 'esc_url_raw',
+        'fp_img2' => 'esc_url_raw',
+        'fp_features' => 'wp_kses_post',
     ];
 
-    foreach ($fields as $f => $type) {
-        if (!isset($_POST[$f])) continue;
-        $val = $_POST[$f];
-        if ($type === 'url') update_post_meta($post_id, $f, esc_url_raw($val));
-        elseif ($type === 'int') update_post_meta($post_id, $f, intval($val));
-        else update_post_meta($post_id, $f, sanitize_text_field($val));
+    foreach ($fields_to_save as $meta_key => $sanitizer) {
+        if (isset($_POST[$meta_key])) {
+            $data = call_user_func($sanitizer, $_POST[$meta_key]);
+            update_post_meta($post_id, $meta_key, $data);
+        }
     }
-});
+}
 
 
-//Settings page: Display Colors (front-end)
+/* ---------------------------
+| 5) Global Settings: The Control Room
+----------------------------*/
 
-add_action('admin_menu', function () {
-    add_options_page('Futuristic Portfolio Settings', 'Futuristic Portfolio', 'manage_options', 'fp_settings', 'fp_settings_page');
-});
+// Add the settings page under 'Settings'
+add_action('admin_menu', 'fp_add_settings_page');
+function fp_add_settings_page() {
+    add_options_page(
+        'Futuristic Portfolio Settings',
+        'Futuristic Portfolio',
+        'manage_options',
+        'fp_settings',
+        'fp_render_settings_page'
+    );
+}
 
-function fp_settings_page()
-{
-    if (!current_user_can('manage_options')) return;
-
-    if (isset($_POST['fp_save'])) {
-        check_admin_referer('fp_settings_save', 'fp_settings_nonce');
-        update_option('fp_color_card_bg', sanitize_hex_color($_POST['fp_color_card_bg']));
-        update_option('fp_color_title', sanitize_hex_color($_POST['fp_color_title']));
-        update_option('fp_color_popup_bg', sanitize_hex_color($_POST['fp_color_popup_bg']));
-        update_option('fp_color_popup_border', sanitize_hex_color($_POST['fp_color_popup_border']));
-        update_option('fp_color_button', sanitize_hex_color($_POST['fp_color_button']));
-        update_option('fp_color_text', sanitize_hex_color($_POST['fp_color_text']));
-        echo '<div class="updated"><p>Saved.</p></div>';
-    }
-
-    $c_card = get_option('fp_color_card_bg', '#0a0f24');
-    $c_title = get_option('fp_color_title', '#00eaff');
-    $c_popup = get_option('fp_color_popup_bg', '#0a0f24');
-    $c_border = get_option('fp_color_popup_border', '#00eaff');
-    $c_btn = get_option('fp_color_button', '#00eaff');
-    $c_text = get_option('fp_color_text', '#eafcff');
-
+// Render the content of the settings page
+function fp_render_settings_page() {
     ?>
     <div class="wrap">
-        <h1>Futuristic Portfolio — Display Settings</h1>
-        <form method="post">
-            <?php wp_nonce_field('fp_settings_save', 'fp_settings_nonce'); ?>
-            <table class="form-table">
-                <tr><th>Card Background</th><td><input type="color" name="fp_color_card_bg" value="<?php echo esc_attr($c_card); ?>"></td></tr>
-                <tr><th>Card Title Color</th><td><input type="color" name="fp_color_title" value="<?php echo esc_attr($c_title); ?>"></td></tr>
-                <tr><th>Popup Background</th><td><input type="color" name="fp_color_popup_bg" value="<?php echo esc_attr($c_popup); ?>"></td></tr>
-                <tr><th>Popup Border/Glow</th><td><input type="color" name="fp_color_popup_border" value="<?php echo esc_attr($c_border); ?>"></td></tr>
-                <tr><th>Button Color</th><td><input type="color" name="fp_color_button" value="<?php echo esc_attr($c_btn); ?>"></td></tr>
-                <tr><th>Popup Text Color</th><td><input type="color" name="fp_color_text" value="<?php echo esc_attr($c_text); ?>"></td></tr>
-            </table>
-            <p><button class="button button-primary" name="fp_save">Save Settings</button></p>
+        <h1>Futuristic Portfolio Global Settings (The Master Control Panel)</h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('fp_options_group');
+            do_settings_sections('fp_settings');
+            submit_button();
+            ?>
         </form>
     </div>
     <?php
 }
 
+// Register all the global settings
+add_action('admin_init', 'fp_register_settings');
+function fp_register_settings() {
+    register_setting('fp_options_group', 'fp_global_whatsapp', ['sanitize_callback' => 'sanitize_text_field']);
+    register_setting('fp_options_group', 'fp_predefined_message', ['sanitize_callback' => 'sanitize_text_field']);
+    register_setting('fp_options_group', 'fp_color_card_bg', ['sanitize_callback' => 'sanitize_hex_color']);
+    register_setting('fp_options_group', 'fp_color_title', ['sanitize_callback' => 'sanitize_hex_color']);
+    register_setting('fp_options_group', 'fp_color_popup_bg', ['sanitize_callback' => 'sanitize_hex_color']);
+    register_setting('fp_options_group', 'fp_color_popup_border', ['sanitize_callback' => 'sanitize_hex_color']);
+    register_setting('fp_options_group', 'fp_color_button', ['sanitize_callback' => 'sanitize_hex_color']);
+    register_setting('fp_options_group', 'fp_color_text', ['sanitize_callback' => 'sanitize_hex_color']);
 
-// Shortcode render 
+    // General Settings Section
+    add_settings_section('fp_general_section', 'Global WhatsApp Integration (The Gossip Line)', null, 'fp_settings');
+    add_settings_field('fp_global_whatsapp', 'WhatsApp Number (e.g., +2547XXXXXXXX)', 'fp_whatsapp_field', 'fp_settings', 'fp_general_section');
+    add_settings_field('fp_predefined_message', 'Predefined Message (Use {link} placeholder)', 'fp_message_field', 'fp_settings', 'fp_general_section');
 
+    // Color Settings Section
+    add_settings_section('fp_color_section', 'Aesthetic Controls (The Glamour Shots)', null, 'fp_settings');
+    add_settings_field('fp_color_card_bg', 'Card Background Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_card_bg', 'default' => '#0a0f24']);
+    add_settings_field('fp_color_title', 'Title Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_title', 'default' => '#00eaff']);
+    add_settings_field('fp_color_popup_bg', 'Modal Background Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_popup_bg', 'default' => '#0a0f24']);
+    add_settings_field('fp_color_popup_border', 'Modal Border Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_popup_border', 'default' => '#00eaff']);
+    add_settings_field('fp_color_button', 'Button Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_button', 'default' => '#00eaff']);
+    add_settings_field('fp_color_text', 'Text Color', 'fp_color_field', 'fp_settings', 'fp_color_section', ['option_name' => 'fp_color_text', 'default' => '#eafcff']);
+}
+
+// Helper function for the WhatsApp number field
+function fp_whatsapp_field() {
+    $option = get_option('fp_global_whatsapp', '');
+    echo '<input type="text" name="fp_global_whatsapp" value="' . esc_attr($option) . '" style="width: 300px;">';
+}
+
+// Helper function for the predefined message field
+function fp_message_field() {
+    $option = get_option('fp_predefined_message', 'Hi, I want a project like {link} on your website.');
+    echo '<input type="text" name="fp_predefined_message" value="' . esc_attr($option) . '" style="width: 500px;">';
+    echo '<p class="description">Use {link} to dynamically insert the project\'s live URL.</p>';
+}
+
+// Helper function for color fields
+function fp_color_field($args) {
+    $option_name = $args['option_name'];
+    $default = $args['default'];
+    $option = get_option($option_name, $default);
+    echo '<input type="color" name="' . esc_attr($option_name) . '" value="' . esc_attr($option) . '">';
+    // WordPress doesn't have a native color picker field, so this is the standard HTML way.
+}
+
+
+/* ---------------------------
+| 6) The Frontend Grand Entrance Shortcode
+----------------------------*/
 function fp_render_portfolio($atts = [])
 {
+    // Snatch all the shiny projects
     $projects = get_posts(['post_type' => 'futuristic_project', 'posts_per_page' => -1, 'orderby' => 'date', 'order' => 'DESC']);
 
-    // colors
+    // Acquire the sacred color palette
     $card_bg = esc_attr(get_option('fp_color_card_bg', '#0a0f24'));
     $title_color = esc_attr(get_option('fp_color_title', '#00eaff'));
     $popup_bg = esc_attr(get_option('fp_color_popup_bg', '#0a0f24'));
@@ -255,21 +329,27 @@ function fp_render_portfolio($atts = [])
     $btn_color = esc_attr(get_option('fp_color_button', '#00eaff'));
     $text_color = esc_attr(get_option('fp_color_text', '#eafcff'));
 
-    // nonces
+    // Retrieve the Global Gossip Line (WhatsApp)
+    $global_whatsapp = get_option('fp_global_whatsapp', '');
+    // Unlock the Pre-Written Seduction Message
+    $predefined_message_template = get_option('fp_predefined_message', 'Hi, I want a project like {link} on your website.');
+
+    // Gather all the magical security tokens (Nonces)
     $nonce_like = wp_create_nonce('fp_like');
     $nonce_view = wp_create_nonce('fp_view');
     $nonce_rate = wp_create_nonce('fp_rate');
 
+    // Engage the Output Buffer, commence scrolling!
     ob_start();
     ?>
     <style>
-    /* Grid */
+    /* The Grid That Bends But Doesn't Break */
     .fp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;padding:18px;box-sizing:border-box}
     @media(max-width:1200px){.fp-grid{grid-template-columns:repeat(3,1fr)}}
     @media(max-width:900px){.fp-grid{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:500px){.fp-grid{grid-template-columns:repeat(1,1fr)}}
 
-    /* Card */
+    /* Giving the Cards a Glow-Up */
     .fp-card{background:<?php echo $card_bg ?>;padding:14px;border-radius:12px;cursor:pointer;border:1px solid rgba(255,255,255,0.04);color:<?php echo $text_color ?>;transition:transform .18s, box-shadow .18s}
     .fp-card:hover{transform:translateY(-6px);box-shadow:0 10px 20px rgba(0,0,0,0.2)}
     .fp-card img{width:100%;height:160px;object-fit:cover;border-radius:8px}
@@ -277,13 +357,13 @@ function fp_render_portfolio($atts = [])
     .fp-stars{color:#ffd700;margin-top:6px}
     .fp-meta{margin-top:8px;color:rgba(255,255,255,0.75);font-size:13px}
 
-    /* Modal - MODIFIED FOR SCROLLING AND CONTAINMENT */
+    /* The Modal, Ready to Scroll into Oblivion */
     .fp-modal-bg{
         display:none;position:fixed;inset:0;
         background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);
         justify-content:center;align-items:center;
         z-index:99999;padding:18px;
-        overflow-y: auto; /* Fallback for very short content */
+        overflow-y: auto; 
     }
     .fp-modal{
         background:<?php echo $popup_bg ?>;
@@ -295,12 +375,12 @@ function fp_render_portfolio($atts = [])
         box-shadow:0 0 36px <?php echo $popup_border ?>33;
         color:<?php echo $text_color ?>;
         position:relative;
-        /* Key changes for responsiveness and scrolling */
-        max-height: calc(100vh - 36px); /* Ensure modal fits within viewport with padding */
-        overflow-y: auto; /* Make modal content scrollable */
+        /* Scrollable modal body */
+        max-height: calc(100vh - 36px); 
+        overflow-y: auto; 
     }
     
-    /* Buttons */
+    /* Pimp My Buttons */
     .fp-btn{display:inline-block;padding:10px 14px;border-radius:9px;background:<?php echo $btn_color ?>;color:#000;font-weight:700;text-decoration:none;margin-right:8px;border:none;cursor:pointer}
     .fp-like{
         background:transparent;color:<?php echo $btn_color ?>;
@@ -310,7 +390,7 @@ function fp_render_portfolio($atts = [])
     }
     .fp-like:hover{background:rgba(0, 234, 255, 0.1);}
     
-    /* Exit Button Refinement */
+    /* The Escape Hatch Button */
     .fp-exit{
         position:absolute;top:10px;right:10px;
         padding:8px 12px;
@@ -324,7 +404,7 @@ function fp_render_portfolio($atts = [])
     }
     .fp-exit:hover{background:rgba(255,0,0,0.8); color:#fff;}
 
-    /* Misc */
+    /* Random Visual Enhancements */
     .fp-features-list{margin-top:12px;padding-left:18px}
     .fp-rating-stars{color:#ffd700;cursor:pointer;display:inline-block}
     .fp-rating-stars span{font-size:20px;margin-right:4px}
@@ -334,6 +414,7 @@ function fp_render_portfolio($atts = [])
 
     <div class="fp-grid" id="fp-grid">
         <?php foreach ($projects as $p):
+            // Drill for Project Gold (Get project data)
             $id = $p->ID;
             $title = get_post_meta($id, 'fp_title', true) ?: get_the_title($id);
             $prob = get_post_meta($id, 'fp_problem', true);
@@ -341,17 +422,38 @@ function fp_render_portfolio($atts = [])
             $img1 = get_post_meta($id, 'fp_img1', true) ?: '';
             $img2 = get_post_meta($id, 'fp_img2', true) ?: $img1;
             $features = get_post_meta($id, 'fp_features', true);
-            $whatsapp = get_post_meta($id, 'fp_whatsapp', true);
             $rating = floatval(get_post_meta($id, 'fp_rating', true));
             $reviews = intval(get_post_meta($id, 'fp_reviews', true));
             $likes = intval(get_post_meta($id, 'fp_likes', true));
             $views = intval(get_post_meta($id, 'fp_views', true));
             $features_array = [];
             if ($features) {
-                // support newline or comma separated
+                // Split features data
                 if (strpos($features, "\n") !== false) $features_array = array_filter(array_map('trim', explode("\n", $features)));
                 else $features_array = array_filter(array_map('trim', explode(',', $features)));
             }
+            
+            // --- WHATSAPP LINK FIX: Safely determine the 'I Want Like This' link ---
+            $wa_link = '#'; // Default fallback (the haunted link)
+            $wa_target = ''; // Default target attribute
+            $wa_rel = ''; // Default rel attribute
+
+            if (!empty($global_whatsapp)) {
+                // 1. Clean the number for wa.me link
+                $clean_num = preg_replace('/[^0-9+]/', '', $global_whatsapp);
+                
+                // 2. Prepare the message
+                $raw_msg_template = $predefined_message_template;
+                $final_msg_raw = str_replace('{link}', esc_url_raw($link), $raw_msg_template);
+                $msg = rawurlencode($final_msg_raw);
+                
+                // 3. Construct the final link
+                $wa_link = "https://wa.me/{$clean_num}?text={$msg}";
+                $wa_target = '_blank';
+                $wa_rel = 'noopener';
+            } 
+            // NOTE: If $global_whatsapp is empty, $wa_link remains '#', and $wa_target/rel remain empty.
+            // --- END OF WHATSAPP LINK FIX ---
             ?>
             <div class="fp-card" data-id="<?php echo $id ?>" data-img2="<?php echo esc_url($img2) ?>" data-link="<?php echo esc_url($link) ?>" data-title="<?php echo esc_attr($title) ?>" data-prob="<?php echo esc_attr($prob) ?>" onclick="fp_open_modal(<?php echo $id ?>)">
                 <?php if ($img1): ?><img src="<?php echo esc_url($img1) ?>" alt="Project Image"><?php endif; ?>
@@ -360,7 +462,7 @@ function fp_render_portfolio($atts = [])
                 <div class="fp-meta">Likes: <span class="fp-like-count-<?php echo $id ?>"><?php echo $likes ?></span> · Views: <span class="fp-view-count-<?php echo $id ?>"><?php echo $views ?></span></div>
             </div>
 
-            <!-- modal -->
+            <!-- Project's Very Own Private Disco (Modal) -->
             <div class="fp-modal-bg" id="fp-modal-<?php echo $id ?>" onclick="if(event.target === this) fp_close_modal(<?php echo $id ?>)">
                 <div class="fp-modal" role="dialog" aria-modal="true" aria-labelledby="fp-title-<?php echo $id ?>">
                     <button class="fp-exit" onclick="fp_close_modal(<?php echo $id ?>)">X</button>
@@ -378,17 +480,8 @@ function fp_render_portfolio($atts = [])
                     <?php endif; ?>
 
                     <div style="margin-top:12px;">
-                        <?php
-                        // WhatsApp button target (if provided) otherwise fallback to link
-                        $wa_link = '#';
-                        if ($whatsapp) {
-                            $clean = preg_replace('/[^0-9+]/', '', $whatsapp);
-                            $msg = rawurlencode("Hi — I want a project like: {$title} ({$link})");
-                            $wa_link = "https://api.whatsapp.com/send?phone={$clean}&text={$msg}";
-                        }
-                        ?>
                         <a class="fp-btn" href="<?php echo esc_url($link) ?>" target="_blank" rel="noopener">Visit Live</a>
-                        <a class="fp-btn" href="<?php echo esc_url($wa_link) ?>" target="_blank" rel="noopener">I Want Like This</a>
+                        <a class="fp-btn" href="<?php echo esc_url($wa_link) ?>" target="<?php echo $wa_target; ?>" rel="<?php echo $wa_rel; ?>">I Want Like This</a>
                         <button class="fp-like" onclick="fp_like(<?php echo $id ?>, this)">
                             ❤ Like <span id="fp-like-count-<?php echo $id ?>"><?php echo $likes ?></span>
                             <span class="fp-message" style="display:none;" id="fp-like-msg-<?php echo $id ?>"></span>
@@ -397,7 +490,7 @@ function fp_render_portfolio($atts = [])
 
                     <div style="margin-top:12px;color:rgba(255,255,255,0.9)">Reviews: <strong id="fp-rev-count-<?php echo $id ?>"><?php echo $reviews ?></strong> — Avg: <strong id="fp-avg-<?php echo $id ?>"><?php echo number_format($rating, 1) ?></strong> / 5</div>
 
-                    <!-- Front-end rating -->
+                    <!-- The People's Court of Ratings (Frontend Rating) -->
                     <div class="fp-review-form" id="fp-review-form-<?php echo $id ?>">
                         <h4>Add a rating</h4>
                         <div class="fp-rating-stars" id="fp-stars-<?php echo $id ?>">
@@ -417,249 +510,289 @@ function fp_render_portfolio($atts = [])
     </div>
 
     <script>
-    (function(){
-        var ajaxUrl = '<?php echo admin_url('admin-ajax.php'); ?>';
-        var nonceLike = '<?php echo $nonce_like; ?>';
-        var nonceView = '<?php echo $nonce_view; ?>';
-        var nonceRate = '<?php echo $nonce_rate; ?>';
+        // Store nonces and AJAX URL in a global object (The Secret Scrolls)
+        const fp_ajax = {
+            url: "<?php echo admin_url('admin-ajax.php'); ?>",
+            nonce_like: "<?php echo $nonce_like; ?>",
+            nonce_view: "<?php echo $nonce_view; ?>",
+            nonce_rate: "<?php echo $nonce_rate; ?>"
+        };
 
-        function fp_show_message(id, type, message, duration = 2000) {
-            var msgEl = document.getElementById('fp-' + type + '-msg-' + id);
-            if (!msgEl) return;
-            var originalContent = msgEl.textContent;
-            msgEl.textContent = message;
-            msgEl.style.display = 'inline';
-            setTimeout(function() {
-                msgEl.style.display = 'none';
-                // Reset content if it was for rating form
-                if(type === 'rate') msgEl.textContent = originalContent;
-            }, duration);
+        // Function to open the project modal
+        function fp_open_modal(id) {
+            const modal = document.getElementById('fp-modal-' + id);
+            if (modal) {
+                modal.style.display = 'flex';
+                // The View Counter Must Go Up! (Fire off the AJAX for a view)
+                if (!localStorage.getItem('fp_viewed_' + id)) {
+                    fp_handle_view_ajax(id);
+                }
+            }
         }
 
-        // open modal, increment views
-        window.fp_open_modal = function(id){
-            var el = document.getElementById('fp-modal-'+id);
-            if(!el) return;
-            el.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-            // increment views (AJAX)
-            fetch(ajaxUrl, {
+        // Function to close the project modal
+        function fp_close_modal(id) {
+            const modal = document.getElementById('fp-modal-' + id);
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // AJAX function to Acknowledge the Gaze (Handle view count)
+        function fp_handle_view_ajax(id) {
+            const viewCountElement = document.querySelector('.fp-view-count-' + id);
+            
+            fetch(fp_ajax.url, {
                 method: 'POST',
-                credentials: 'same-origin',
-                headers: {'Content-Type':'application/x-www-form-urlencoded'},
-                body: 'action=fp_view&post_id='+encodeURIComponent(id)+'&nonce='+encodeURIComponent(nonceView)
-            }).then(res=>res.json()).then(function(r){
-                if (r.success) {
-                    var elCount = document.querySelector('.fp-view-count-'+id) || document.getElementById('fp-view-count-'+id);
-                    if (elCount) elCount.textContent = r.data.views;
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'fp_handle_view',
+                    project_id: id,
+                    nonce: fp_ajax.nonce_view
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && viewCountElement) {
+                    viewCountElement.textContent = data.data.views;
+                    localStorage.setItem('fp_viewed_' + id, 'true'); // One view per browser, per project.
                 }
-            }).catch(function(){});
-        };
+            })
+            .catch(error => console.error('Error acknowledging the gaze:', error));
+        }
 
-        window.fp_close_modal = function(id){
-            var el = document.getElementById('fp-modal-'+id);
-            if(!el) return;
-            el.style.display = 'none';
-            document.body.style.overflow = '';
-        };
 
-        // likes: prevent multiple likes by storing in localStorage
-        window.fp_like = function(id, btn){
-            var key = 'fp_liked_'+id;
-            if (localStorage.getItem(key)) {
-                return fp_show_message(id, 'like', 'Already liked!', 1500);
+        // Function to Register the Digital Heart Throb (Handle like)
+        function fp_like(id, btn) {
+            // The Like button has been deployed! Prevent repeated digital affection.
+            if (localStorage.getItem('fp_liked_' + id)) {
+                document.getElementById('fp-like-msg-' + id).textContent = 'You already love this one!';
+                document.getElementById('fp-like-msg-' + id).style.display = 'inline';
+                setTimeout(() => { document.getElementById('fp-like-msg-' + id).style.display = 'none'; }, 2000);
+                return;
+            }
+
+            const likeCountElement = document.getElementById('fp-like-count-' + id);
+            const cardLikeCountElement = document.querySelector('.fp-like-count-' + id);
+
+            fetch(fp_ajax.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'fp_handle_like',
+                    project_id: id,
+                    nonce: fp_ajax.nonce_like
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    likeCountElement.textContent = data.data.likes;
+                    if (cardLikeCountElement) cardLikeCountElement.textContent = data.data.likes;
+                    localStorage.setItem('fp_liked_' + id, 'true');
+                    document.getElementById('fp-like-msg-' + id).textContent = 'Digital affection received!';
+                    document.getElementById('fp-like-msg-' + id).style.display = 'inline';
+                    setTimeout(() => { document.getElementById('fp-like-msg-' + id).style.display = 'none'; }, 2000);
+                }
+            })
+            .catch(error => console.error('Error registering heart throb:', error));
+        }
+        
+        // Function to Process the Public Scrutiny (Rating)
+        function fp_submit_rating(id) {
+            // The People's Court of Ratings is in session. Let the stars fly!
+            if (localStorage.getItem('fp_rated_' + id)) {
+                document.getElementById('fp-rate-msg-' + id).textContent = 'You have already cast your vote, citizen!';
+                return;
+            }
+
+            const starElements = document.querySelectorAll('#fp-stars-' + id + ' span');
+            let rating = 0;
+            starElements.forEach(span => {
+                if (span.textContent === '★') {
+                    rating = parseInt(span.dataset.star);
+                }
+            });
+
+            if (rating === 0) {
+                document.getElementById('fp-rate-msg-' + id).textContent = 'Please select a star rating first!';
+                return;
             }
             
-            fp_show_message(id, 'like', 'Liking...');
+            const name = document.getElementById('fp-review-name-' + id).value;
+            const rateMsg = document.getElementById('fp-rate-msg-' + id);
 
-            fetch(ajaxUrl, {
-                method:'POST',
-                credentials:'same-origin',
-                headers: {'Content-Type':'application/x-www-form-urlencoded'},
-                body: 'action=fp_like&post_id='+encodeURIComponent(id)+'&nonce='+encodeURIComponent(nonceLike)
-            }).then(r=>r.json()).then(function(res){
-                if (res.success) {
-                    localStorage.setItem(key, '1');
-                    var cntEl = document.getElementById('fp-like-count-'+id) || document.querySelector('.fp-like-count-'+id);
-                    if (cntEl) cntEl.textContent = res.data.likes;
-                    fp_show_message(id, 'like', 'Thanks!', 1000);
+            rateMsg.textContent = 'Submitting...';
+
+            fetch(fp_ajax.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'fp_handle_rate',
+                    project_id: id,
+                    nonce: fp_ajax.nonce_rate,
+                    rating: rating,
+                    name: name
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('fp-avg-' + id).textContent = parseFloat(data.data.new_avg).toFixed(1);
+                    document.getElementById('fp-rev-count-' + id).textContent = data.data.new_reviews;
+                    
+                    // Update star rating in the main card (though it's only floor)
+                    const cardStars = document.querySelector('.fp-card[data-id="' + id + '"] .fp-stars');
+                    if(cardStars) {
+                         const floorRating = '⭐'.repeat(Math.floor(data.data.new_avg));
+                         const reviewCountText = cardStars.querySelector('small').outerHTML;
+                         cardStars.innerHTML = floorRating + ' ' + reviewCountText;
+                    }
+
+
+                    localStorage.setItem('fp_rated_' + id, 'true');
+                    rateMsg.textContent = 'Rating saved! Thank you, citizen.';
                 } else {
-                    fp_show_message(id, 'like', res.data || 'Failed to like', 1500);
+                    rateMsg.textContent = data.data || 'Failed to submit rating (Check Console).';
                 }
-            }).catch(function(){ fp_show_message(id, 'like', 'Error liking.', 1500); });
-        };
-
-        // Rating stars UI
-        document.addEventListener('click', function(e){
-            if (!e.target) return;
-            var star = e.target.closest && e.target.closest('[data-star]');
-            if (!star) return;
-            var container = star.parentNode;
-            // Only proceed if it is a rating container
-            if (!container.id.startsWith('fp-stars-')) return;
-
-            var selected = parseInt(star.getAttribute('data-star'));
-            
-            // fill stars
-            var spans = container.querySelectorAll('span[data-star]');
-            spans.forEach(function(s){
-                var sVal = parseInt(s.getAttribute('data-star'));
-                s.textContent = sVal <= selected ? '★' : '☆';
+            })
+            .catch(error => {
+                console.error('Error processing public scrutiny:', error);
+                rateMsg.textContent = 'A server error occurred. Try again later.';
             });
-            container.setAttribute('data-selected', selected);
+        }
+
+        // Initialize star hover functionality for rating
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.fp-rating-stars').forEach(starContainer => {
+                // The Stars Must Shine!
+                starContainer.querySelectorAll('span').forEach(star => {
+                    star.addEventListener('mouseover', function() {
+                        const hoverRating = parseInt(this.dataset.star);
+                        starContainer.querySelectorAll('span').forEach(s => {
+                            const currentStar = parseInt(s.dataset.star);
+                            s.textContent = currentStar <= hoverRating ? '★' : '☆';
+                        });
+                    });
+
+                    star.addEventListener('mouseout', function() {
+                        starContainer.querySelectorAll('span').forEach(s => s.textContent = '☆');
+                    });
+
+                    star.addEventListener('click', function() {
+                        // Lock in the chosen rating (prevents mouseout from clearing it)
+                        const finalRating = parseInt(this.dataset.star);
+                        starContainer.querySelectorAll('span').forEach(s => {
+                            const currentStar = parseInt(s.dataset.star);
+                            s.textContent = currentStar <= finalRating ? '★' : '☆';
+                        });
+                        // Prevent accidental rating submission by using a local storage flag check in the submit function
+                        // We don't submit here, we just select. Submission is on the button click.
+                    });
+                });
+            });
         });
 
-        // submit rating
-        window.fp_submit_rating = function(id){
-            var starsContainer = document.querySelector('#fp-stars-'+id);
-            var stars = starsContainer.getAttribute('data-selected') || 0;
-            stars = parseInt(stars);
-            
-            if (!stars || stars < 1 || stars > 5) {
-                fp_show_message(id, 'rate', 'Select 1–5 stars first', 1500);
-                return;
-            }
-
-            // --- RATING DEDUPLICATION LOGIC ADDED HERE ---
-            var key = 'fp_rated_' + id;
-            if (localStorage.getItem(key)) {
-                fp_show_message(id, 'rate', 'You already rated this!', 2000);
-                return;
-            }
-            // ---------------------------------------------
-            
-            var name = encodeURIComponent(document.getElementById('fp-review-name-'+id).value || 'Guest');
-
-            fp_show_message(id, 'rate', 'Submitting...');
-
-            fetch(ajaxUrl, {
-                method:'POST',
-                credentials:'same-origin',
-                headers: {'Content-Type':'application/x-www-form-urlencoded'},
-                body: 'action=fp_rate&post_id='+encodeURIComponent(id)+'&stars='+encodeURIComponent(stars)+'&name='+name+'&nonce='+encodeURIComponent(nonceRate)
-            }).then(r=>r.json()).then(function(res){
-                if (res.success) {
-                    // Set flag in localStorage on successful submission
-                    localStorage.setItem(key, '1');
-
-                    fp_show_message(id, 'rate', 'Thanks — rating saved', 2000);
-                    // update counts and avg
-                    var revCount = document.getElementById('fp-rev-count-'+id);
-                    var avg = document.getElementById('fp-avg-'+id);
-                    if (revCount) revCount.textContent = res.data.reviews;
-                    if (avg) avg.textContent = parseFloat(res.data.avg).toFixed(1); // Ensure one decimal place for display
-                    
-                    // reset star selection
-                    var spans = starsContainer.querySelectorAll('span');
-                    spans.forEach(function(s){ s.textContent = '☆'; });
-                    starsContainer.removeAttribute('data-selected');
-                } else {
-                    fp_show_message(id, 'rate', res.data || 'Failed to save rating', 1500);
-                }
-            }).catch(function(){ fp_show_message(id, 'rate', 'Error saving rating.', 1500); });
-        };
-
-    })();
     </script>
-
     <?php
+
+    // End buffering and return the HTML output
     return ob_get_clean();
 }
-
 add_shortcode('future_portfolio', 'fp_render_portfolio');
 add_shortcode('futuristic_portfolio', 'fp_render_portfolio');
 
 
+/* ---------------------------
+| 7) AJAX Endpoints: The Back-End Wizards
+----------------------------*/
 
+// Acknowledge the Gaze: Handles a view event when the modal opens.
+add_action('wp_ajax_fp_handle_view', 'fp_handle_view');
+add_action('wp_ajax_nopriv_fp_handle_view', 'fp_handle_view');
 
-//7) AJAX: like, view, rate
+function fp_handle_view() {
+    // Security check on the magical token
+    check_ajax_referer('fp_view', 'nonce');
 
-
-// Like
-add_action('wp_ajax_fp_like', 'fp_handle_like');
-add_action('wp_ajax_nopriv_fp_like', 'fp_handle_like');
-function fp_handle_like(){
-    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'fp_like')) wp_send_json_error('Invalid nonce');
-    $post_id = intval($_POST['post_id'] ?? 0);
-    if (!$post_id) wp_send_json_error('Invalid post');
-
-    $likes = intval(get_post_meta($post_id, 'fp_likes', true));
-    $likes++;
-    update_post_meta($post_id, 'fp_likes', $likes);
-
-    wp_send_json_success(['likes' => $likes]);
-}
-
-// View
-add_action('wp_ajax_fp_view', 'fp_handle_view');
-add_action('wp_ajax_nopriv_fp_view', 'fp_handle_view');
-function fp_handle_view(){
-    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'fp_view')) wp_send_json_error('Invalid nonce');
-    $post_id = intval($_POST['post_id'] ?? 0);
-    if (!$post_id) wp_send_json_error('Invalid post');
-
-    $views = intval(get_post_meta($post_id, 'fp_views', true));
-    $views++;
-    update_post_meta($post_id, 'fp_views', $views);
-
-    wp_send_json_success(['views' => $views]);
-}
-
-// Rating
-add_action('wp_ajax_fp_rate', 'fp_handle_rate');
-add_action('wp_ajax_nopriv_fp_rate', 'fp_handle_rate');
-function fp_handle_rate(){
-    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'fp_rate')) wp_send_json_error('Invalid nonce');
-    $post_id = intval($_POST['post_id'] ?? 0);
-    $stars = intval($_POST['stars'] ?? 0);
-    $name = sanitize_text_field($_POST['name'] ?? 'Guest');
-
-    if (!$post_id || $stars < 1 || $stars > 5) wp_send_json_error('Invalid data');
-
-    // Fetch all existing ratings
-    $ratings = get_post_meta($post_id, 'fp_ratings', true);
-    if (!is_array($ratings)) $ratings = [];
-
-    // Add the new rating
-    $r = [
-        'id' => uniqid('r', true),
-        'stars' => $stars,
-        'name' => $name,
-        'date' => current_time('mysql')
-    ];
-    $ratings[] = $r;
-    
-    // Save the updated list of ratings
-    update_post_meta($post_id, 'fp_ratings', $ratings);
-
-    // Update aggregate: count & average
-    $count = count($ratings);
-    $sum = 0;
-    foreach ($ratings as $rr) $sum += intval($rr['stars'] ?? 0);
-    $avg = round($sum / max(1, $count), 2);
-    
-    // Update display meta keys
-    update_post_meta($post_id, 'fp_reviews', $count);
-    update_post_meta($post_id, 'fp_rating', $avg);
-
-    wp_send_json_success(['reviews' => $count, 'avg' => $avg]);
-}
-
-
-
-
- //Admin notice helper to create sample project (optional)
-
-
-add_action('admin_notices', function () {
-    if (!current_user_can('manage_options')) return;
-    global $pagenow;
-    if (!in_array($pagenow, ['post.php', 'post-new.php', 'edit.php'])) return;
-    $found = get_posts(['post_type' => 'futuristic_project', 'posts_per_page' => 1]);
-    if (empty($found)) {
-        echo '<div class="notice notice-info is-dismissible"><p><strong>Futuristic Portfolio:</strong> No projects yet. Add one under <em>Add Project</em> in the WP admin. Use the media uploader (Upload/Select). Use shortcode <code>[future_portfolio]</code>.</p></div>';
+    $project_id = intval($_POST['project_id']);
+    if (!$project_id) {
+        wp_send_json_error('Invalid project ID.');
     }
-});
 
+    // Increment views
+    $current_views = intval(get_post_meta($project_id, 'fp_views', true));
+    $new_views = $current_views + 1;
+    update_post_meta($project_id, 'fp_views', $new_views);
 
-// If you are reading this you are free to customize it as you wish. HAVE FUN!
+    // Send back the new count for glory
+    wp_send_json_success(['views' => $new_views]);
+}
+
+// Register the Digital Heart Throb: Handles a like event.
+add_action('wp_ajax_fp_handle_like', 'fp_handle_like');
+add_action('wp_ajax_nopriv_fp_handle_like', 'fp_handle_like');
+
+function fp_handle_like() {
+    // Security check on the magical token
+    check_ajax_referer('fp_like', 'nonce');
+
+    $project_id = intval($_POST['project_id']);
+    if (!$project_id) {
+        wp_send_json_error('Invalid project ID.');
+    }
+
+    // Increment likes
+    $current_likes = intval(get_post_meta($project_id, 'fp_likes', true));
+    $new_likes = $current_likes + 1;
+    update_post_meta($project_id, 'fp_likes', $new_likes);
+
+    // Send back the new count for digital affection
+    wp_send_json_success(['likes' => $new_likes]);
+}
+
+// Process the Public Scrutiny (Rating): Handles submission of a new rating.
+add_action('wp_ajax_fp_handle_rate', 'fp_handle_rate');
+add_action('wp_ajax_nopriv_fp_handle_rate', 'fp_handle_rate');
+
+function fp_handle_rate() {
+    // Security check on the magical token
+    check_ajax_referer('fp_rate', 'nonce');
+
+    $project_id = intval($_POST['project_id']);
+    $rating = intval($_POST['rating']);
+    $name = sanitize_text_field($_POST['name'] ?? 'Anonymous Voyager');
+
+    if (!$project_id || $rating < 1 || $rating > 5) {
+        wp_send_json_error('Invalid project ID or rating value. (The stars are confusing us.)');
+    }
+
+    // Get the array of all ratings, or start a new one
+    $all_ratings = get_post_meta($project_id, 'fp_ratings', true) ?: [];
+    if (!is_array($all_ratings)) $all_ratings = [];
+
+    // Add the new rating to the list
+    $all_ratings[] = ['rating' => $rating, 'name' => $name, 'timestamp' => time()];
+    update_post_meta($project_id, 'fp_ratings', $all_ratings);
+
+    // Calculate the new average and count
+    $total_ratings = count($all_ratings);
+    $sum_ratings = array_sum(array_column($all_ratings, 'rating'));
+    $new_avg = ($total_ratings > 0) ? ($sum_ratings / $total_ratings) : 0.0;
+    
+    // Update the simplified meta fields for display
+    update_post_meta($project_id, 'fp_rating', $new_avg);
+    update_post_meta($project_id, 'fp_reviews', $total_ratings);
+
+    // Send back the updated consensus
+    wp_send_json_success([
+        'new_avg' => number_format($new_avg, 1), 
+        'new_reviews' => $total_ratings
+    ]);
+}
+
+/* ---------------------------
+| 8) Admin Notice: Don't forget to enable!
+----------------------------*/
+
+// We should probably add a notice if the shortcode isn't used, but we'll leave that for a future quest.
