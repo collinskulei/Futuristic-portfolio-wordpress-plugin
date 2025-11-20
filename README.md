@@ -1,88 +1,124 @@
-# Futuristic-portfolio-wordpress-plugin
-Futuristic portfolio CPT with media upload, features, whatsapp, frontend ratings, views, likes, and full display color settings.
-Comprehensive User Guide: Futuristic Portfolio Display Plugin
-This guide explains how to install, configure, and use the Futuristic Portfolio Display WordPress plugin, which allows you to showcase projects with detailed information, user ratings, and futuristic styling.
+Futuristic Portfolio Display Plugin – Installation & User Guide
 
-1. Installation and Setup
-This plugin creates a custom area in your WordPress dashboard for managing your portfolio entries.
+This guide will help you install, set up, and use the Futuristic Portfolio Display WordPress plugin.
+The plugin allows you to showcase your projects in a modern, futuristic design with features such as:
 
-1.1 Installation
-Save the Code: Save the provided PHP code into a single file named futuristic-portfolio-display.php.
-Upload: Upload the futuristic-portfolio-display.php file to your WordPress plugins directory (wp-content/plugins/).
+Custom Portfolio Post Type
 
-Activate: Navigate to Plugins in your WordPress dashboard and click Activate for the "Futuristic Portfolio Display (All Features)" plugin.
-1.2 Accessing the Custom Post Type (CPT)
-Once activated, a new menu item will appear in your admin sidebar: Add Project. This is where you will create and manage all your portfolio items.
+Media uploads (thumbnail + full image)
 
-2. Creating and Configuring Projects
-Every portfolio item is a "Project" custom post.
-2.1 The Project Details Meta Box
-When creating a new project (under Add Project > Add New), you will see the Project Details meta box, which contains all the custom fields for the portfolio display.
-Field Name
-Purpose
-Notes
+Project features list
 
-Display Title
-The main title of the project.
-Defaults to the standard WordPress post title if left blank.
-Problem it Solves
-A brief explanation of the project's purpose.
-Displayed prominently in the pop-up modal.
-Project Link (Visit Live)
-The URL to the live project/website.
-Used by the "Visit Live" button on the front-end.
-Image 1
-The thumbnail image displayed on the main portfolio grid card.
-Use the Upload / Select button to choose from your media library.
-Image 2
-The large feature image displayed inside the pop-up modal.
-This often provides more detail than the thumbnail.
-Features
-A list of key features.
-Enter each feature on a new line or separate them with commas. They will display as a bulleted list in the pop-up.
-WhatsApp Number
-A contact number (with country code).
-Used for the "I Want Like This" button, which directs users to start a WhatsApp chat with a pre-filled message about the specific project.
-2.2 Read-Only and Editable Statistics
-The bottom of the Project Details box shows performance metrics.
-Avg Rating & Review Count: These fields are read-only and are automatically calculated and updated by the plugin when users submit ratings on the front-end.
-Likes & Views: These are automatically incremented by user activity, but they are also editable here. You can set initial values or manually adjust the counts as needed.
+WhatsApp contact button
 
-3. Customizing the Futuristic Look
-The plugin includes a dedicated settings page to control the colors and achieve your desired aesthetic.
-3.1 Accessing Display Settings
-Go to Settings > Futuristic Portfolio.
-3.2 Color Options
-The front-end design uses the following color settings:
-Settings
-Function
-Default Color
-Card Background
-The background color for the individual project cards in the grid.
-#0a0f24 (Very Dark Blue)
-Card Title Color
-The color of the project title on the main card.
-#00eaff (Neon Cyan)
-Popup Background
-The background color of the large project details modal.
-#0a0f24 (Very Dark Blue)
-Popup Border/Glow
-The color of the border around the modal, which also creates a subtle "glow" effect.
-#00eaff (Neon Cyan)
-Button Color
-The background color for the main action buttons ("Visit Live", "I Want Like This").
-#00eaff (Neon Cyan)
-Popup Text Color
-The color of the general text inside the modal.
-#eafcff (Off-White/Light Cyan)
+Front-end ratings
 
-Be sure to click the Save Settings button after making any color changes.
+Views and likes counter
 
+Full color customization options
 
-4. Displaying the Portfolio (Shortcode)
-To show the portfolio grid on any WordPress page or post, simply insert the plugin’s shortcode:
-Shortcode Usage
-Insert one of the following shortcodes into the content editor of the page where you want the portfolio to appear:
+Everything is designed to help you display your work beautifully and collect user engagement.
+
+1. Installation & Setup
+1.1 Installing the Plugin
+
+Save the plugin file
+Save the provided PHP code into a file named:
+futuristic-portfolio-display.php
+
+Upload the plugin
+Upload the file to your server in:
+wp-content/plugins/
+
+Activate the plugin
+
+Open your WordPress dashboard
+
+Go to Plugins
+
+Find Futuristic Portfolio Display (All Features)
+
+Click Activate
+
+Once activated, the plugin will automatically create a new menu item in your dashboard.
+
+1.2 Accessing Your Portfolio (Custom Post Type)
+
+After activation, you will see a new menu option labeled:
+
+“Add Project”
+
+This is where you will create, edit, and manage all your portfolio entries.
+
+2. Creating & Editing Projects
+
+Each portfolio item is added as a Project inside the “Add Project” section.
+
+When adding a new project, you will see the Project Details box, which contains all custom fields used for the futuristic project display.
+
+Below is a simple explanation of what each field does.
+
+2.1 Project Details Fields
+Field Name	Purpose	Notes
+Display Title	Main name of the project shown in the portfolio	If left blank, WordPress post title is used
+Problem it Solves	Description of what the project does or the challenge it solves	Appears clearly inside the popup modal
+Project Link (Visit Live)	URL of the actual project/site	Used by the “Visit Live” button
+Image 1	Thumbnail image shown on the grid card	Add via WordPress media library
+Image 2	Large detailed image shown inside the popup	Used for the showcase/preview
+Features	List of project features	Add each feature on a new line or separate with commas
+WhatsApp Number	Number with country code	Used to generate the “I Want Like This” WhatsApp message
+2.2 Automatic Statistics (Ratings, Likes, Views)
+
+The plugin automatically tracks user interaction:
+
+Average Rating – automatically calculated from user ratings
+
+Review Count – total number of ratings received
+
+Views – increases each time a user opens a project
+
+Likes – increases when a user clicks the like button
+
+You can manually change views and likes from the Project Details box if you want to set starting values.
+
+Rating fields cannot be edited, because they update automatically from users.
+
+3. Customizing the Design (Color Settings)
+
+The plugin gives you full control over the futuristic color scheme.
+
+3.1 Opening the Display Settings
+
+Go to:
+
+Settings → Futuristic Portfolio
+
+3.2 Available Color Customizations
+Setting	What It Changes	Default
+Card Background	Background of each project card	#0a0f24
+Card Title Color	Title color on grid cards	#00eaff
+Popup Background	Main background of the details modal	#0a0f24
+Popup Border/Glow	Glowing border around modal	#00eaff
+Button Color	Color of Visit Live & WhatsApp buttons	#00eaff
+Popup Text Color	General text color inside modal	#eafcff
+
+After adjusting the colors, click Save Settings.
+
+4. Displaying Your Portfolio on a Page
+
+To show your portfolio anywhere on your website, use the plugin shortcode.
+
+4.1 Shortcode
+
+Place this shortcode inside any page or post:
+
 [futuristic_portfolio]
 
-If you need help with setup please Whatsapp  me at +254700574125
+
+Once added, the full futuristic grid layout will appear on that page.
+
+5. Need Help?
+
+If you need assistance with installation or customization, feel free to contact me on WhatsApp:
+
+📞 +254700574125
