@@ -6,6 +6,15 @@
  * Author: Collins Kulei 
  */
 
+/**This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details./*
 /* ---------------------------
 | 1) Custom Post Type & Meta Setup: Preparing the Project Dungeon
 ----------------------------*/
@@ -796,3 +805,4 @@ function fp_handle_rate() {
 ----------------------------*/
 
 // We should probably add a notice if the shortcode isn't used, but we'll leave that for a future quest.
+
