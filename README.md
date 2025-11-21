@@ -122,3 +122,16 @@ Once added, the full futuristic grid layout will appear on that page.
 If you need assistance with installation or customization, feel free to contact me on WhatsApp:
 
 📞 +254700574125
+
+License
+GNU General Public License v2 (or later)
+
+This plugin is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This plugin is distributed in the hope that it will be useful,
+but without any warranty; without even the implied warranty of
+merchantability or fitness for a particular purpose.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this plugin.
+If not, see: https://www.gnu.org/licenses/
